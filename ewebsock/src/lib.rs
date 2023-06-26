@@ -89,16 +89,18 @@ pub struct WsReceiver {
 impl WsReceiver {
     /// Returns a receiver and an event-handler that can be passed to `crate::ws_connect`.
     pub fn new() -> (Self, EventHandler) {
-        Self::new_with_callback(|| {})
+        Self::new_with_callback(|event| {})
     }
 
     /// The given callback will be called on each new message.
     ///
     /// This can be used to wake up the UI thread.
-    pub fn new_with_callback(wake_up: impl Fn() + Send + Sync + 'static) -> (Self, EventHandler) {
+    pub fn new_with_callback(
+        wake_up: impl Fn(WsEvent) + Send + Sync + 'static,
+    ) -> (Self, EventHandler) {
         let (tx, rx) = std::sync::mpsc::channel();
-        let on_event = Box::new(move |event| {
-            wake_up(); // wake up UI thread
+        let on_event = Box::new(move |event: WsEvent| {
+            wake_up(event.clone()); // wake up UI thread
             if tx.send(event).is_ok() {
                 ControlFlow::Continue(())
             } else {
@@ -183,7 +185,7 @@ pub fn connect(url: impl Into<String>, options: Options) -> Result<(WsSender, Ws
 pub fn connect_with_wakeup(
     url: impl Into<String>,
     options: Options,
-    wake_up: impl Fn() + Send + Sync + 'static,
+    wake_up: impl Fn(WsEvent) + Send + Sync + 'static,
 ) -> Result<(WsSender, WsReceiver)> {
     let (receiver, on_event) = WsReceiver::new_with_callback(wake_up);
     let sender = ws_connect(url.into(), options, on_event)?;
